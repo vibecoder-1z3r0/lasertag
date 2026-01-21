@@ -1152,6 +1152,125 @@ Source: `recoilnetwork.h` lines 479-490
 
 ---
 
+## Firmware Security and Signing
+
+### Critical Discovery: Public Private Key
+
+**IMPORTANT:** The private key used for firmware signing is publicly available in the Recoil Documentation repository as `priv.pem`:
+
+```
+File: https://github.com/SkyRocketToys/Recoil_Documentation/blob/master/priv.pem
+Type: EC (Elliptic Curve) Private Key
+Format: PEM encoded
+```
+
+### Security Implications
+
+**From a Security Standpoint:**
+
+⚠️ **Critical Vulnerabilities:**
+- Anyone with access to this key can sign firmware that guns will accept as legitimate
+- No authentication barrier exists for OTA firmware updates
+- Malicious actors could potentially create harmful firmware
+- The key cannot be revoked without physical hardware modification
+- All Recoil guns worldwide trust this single compromised key
+
+**From an Open Source Standpoint:**
+
+✅ **Community Benefits:**
+- Community firmware development is fully possible without reverse engineering
+- No proprietary signing process required
+- Long-term maintenance can continue even after manufacturer EOL
+- Educational and research projects have full hardware access
+- Hobbyists can customize gun behavior extensively
+- Transparent security model (no security through obscurity)
+
+### Gun Firmware Update Process
+
+Source: `Recoil_Gun_Firmware_Upgrade_Guide.docx`
+
+**DFU (Device Firmware Update) Protocol:**
+
+The guns use Nordic Semiconductor's standard DFU protocol over BLE:
+
+1. **Enter DFU Mode:**
+   - App sends Control command `0x0100` (Reboot to bootloader)
+   - Gun disconnects, reboots
+   - Bootloader starts
+   - Muzzle LED turns ON (visual indicator)
+   - Power LED turns OFF
+   - Gun advertises as `SRB1_XXXXXX` or `SRB2_XXXXXX`
+
+2. **Bootloader Verification Checks:**
+   - ✅ Image fits in flash memory
+   - ✅ Metadata specifies correct hardware/softdevice/bootloader versions
+   - ✅ Image signature is valid (verified against `priv.pem` public key)
+   - ✅ CRC32 checksum matches received data
+
+3. **Update Process:**
+   - If all checks pass: Flash new firmware
+   - If any check fails: Keep old firmware, discard new image
+   - If old firmware corrupted: Boot to DFU mode, wait for valid image
+
+4. **Recovery:**
+   - Bootloader is separate from main firmware
+   - Even with corrupted main firmware, bootloader still functions
+   - Gun will not become "bricked" - always recoverable via DFU
+
+### Creating Custom Firmware
+
+With the public private key, the community can:
+
+1. **Develop Custom Firmware:**
+   ```bash
+   # Clone Nordic SDK
+   git clone https://github.com/NordicSemiconductor/nRF5-SDK
+
+   # Build custom firmware
+   make
+
+   # Sign with public key (priv.pem)
+   nrfutil pkg generate --hw-version 52 \
+     --sd-req 0x00A9 \
+     --application-version 1 \
+     --application app.hex \
+     --key-file priv.pem \
+     firmware.zip
+   ```
+
+2. **Deploy via Mobile App:**
+   ```dart
+   // Using Nordic's DFU library
+   final dfuUpdate = DfuUpdate(
+     'firmware.zip',
+     deviceId: gun.id,
+   );
+
+   await dfuUpdate.start();
+   ```
+
+3. **Use Reference Implementations:**
+   - **iOS:** nRF Toolbox (App Store)
+   - **Android:** nRF Connect (Play Store)
+   - **Desktop:** nRF Connect Desktop
+   - **Source:** https://github.com/NordicSemiconductor
+
+### Recommendations
+
+**For DIY/Community Projects:**
+- ✅ Use the provided `priv.pem` for compatibility with existing guns
+- ✅ Document any firmware modifications thoroughly
+- ✅ Test extensively before deploying to avoid bricking
+- ✅ Maintain backward compatibility with stock firmware when possible
+
+**For Commercial/Security-Critical Deployments:**
+- ⚠️ Generate new key pair via JTAG/SWD programmer
+- ⚠️ Flash new bootloader with different public key
+- ⚠️ Implement additional security measures (encrypted BLE, etc.)
+- ⚠️ Consider this a known vulnerability of the stock system
+
+---
+
 ## Game Application Integration
 
 Source: `UnityGameNetworkServer/` (Recoil_Hub_OpenWRT_Main)
